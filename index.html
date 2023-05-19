@@ -4,10 +4,15 @@
     <script src="https://accounts.google.com/gsi/client" onload="initClient()" async defer></script>
   </head>
   <body>
+    <h1>Google Identity Services Authorization Token model</h1>
+    <button data-require-token="false" onclick="getToken();">Get access token</button><br><br>
+    <button data-require-token="true" onclick="loadData();">Load Data from Big Query</button><br><br>
+    <button data-require-token="true" onclick="revokeToken();">Revoke token</button>
+    <table id="resTable"></table>
+    
     <script>
       // https://developers.google.com/identity/oauth2/web/guides/migration-to-gis?authuser=1#gis-only
       var client;
-      var access_token;
 
       function initClient() {
 
@@ -15,26 +20,27 @@
           client_id: '470984582294-ciqa45m21eqsli2v0m8kqdsobl2690jg.apps.googleusercontent.com',
           scope: 'https://www.googleapis.com/auth/bigquery',
           callback: (tokenResponse) => {
-            access_token = tokenResponse.access_token;
             tokenResponse.expireAt = Date.now() + (tokenResponse.expires_in - 120)*1000
             console.log(tokenResponse)
             localStorage.setItem('token',JSON.stringify(tokenResponse))
+            console.log("... TOKEN IN LS ...")
+            buttonSet()
           },
         });
 
       }
 
       function getToken() {
-        let token = JSON.parse(localStorage.getItem('token'))
-        if (token && token?.expireAt >= Date.now()) {
-          access_token = token.access_token
-          return token;
+        if (hasToken()) {
+          return JSON.parse(localStorage.getItem('token'))
         }
         client.requestAccessToken();
       }
+
       function revokeToken() {
-        google.accounts.oauth2.revoke(access_token, () => {console.log('access token revoked')});
+        google.accounts.oauth2.revoke(localStorage.getItem("token").access_token, () => {console.log('access token revoked')});
         delete localStorage.token
+        buttonSet()
       }
 
       function makeTable(x){
@@ -56,20 +62,33 @@
           })
         });
       }
+      function clearTable(){
+        let table = document.getElementById("resTable")
+        table.innerText=""
+      }
 
 
-      async function loadCalendar() {
-        getToken()
+      function hasToken(){
+        let token = JSON.parse(localStorage.getItem('token'))
+        return(token && (token.expireAt > Date.now()) )
+      }
+
+      async function loadData(){
+        clearTable()
+        if (!hasToken()) {
+          getToken()
+          return
+        }
+        token = getToken()
+
 
         let project="nih-nci-dceg-druss";
         let dataset="DansDataset"
         let table="FakeData"
-        //https://bigquery.googleapis.com/bigquery/v2/projects/nih-nci-dceg-druss/datasets/DansDataset/tables/FakeData/data?maxResults=20&selectedFields=Id%2CToken&key=[YOUR_API_KEY]'
         let base_url=`https://bigquery.googleapis.com/bigquery/v2/projects/${project}/datasets/${dataset}/tables/${table}/data`
-        let token = "lala"
         let options = {
           headers: {
-            'Authorization': `Bearer ${access_token}`
+            'Authorization': `Bearer ${token.access_token}`
           }
         }
         console.log(base_url)
@@ -80,11 +99,15 @@
 
         makeTable(x)
       }
+
+      function buttonSet(){
+        let haveToken=hasToken()?"true":"false"
+        document.querySelectorAll("button").forEach( (button) => {
+          button.disabled= button.dataset.requireToken!=haveToken
+        } )
+      }
+      buttonSet()
     </script>
-    <h1>Google Identity Services Authorization Token model</h1>
-    <button onclick="getToken();">Get access token</button><br><br>
-    <button onclick="loadCalendar();">Load Calendar</button><br><br>
-    <button onclick="revokeToken();">Revoke token</button>
-    <table id="resTable"></table>
+
   </body>
 </html>
