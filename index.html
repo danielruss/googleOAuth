@@ -7,7 +7,8 @@
     <h1>Google Identity Services Authorization Token model</h1>
     <button data-require-token="false" onclick="getToken();">Get access token</button><br><br>
     <button data-require-token="true" onclick="loadData();">Load Data from Big Query</button><br><br>
-    <button data-require-token="true" onclick="revokeToken();">Revoke token</button>
+    <button data-require-token="true" onclick="revokeToken();">Revoke token</button><br><br>
+    <button data-require-token="always" onclick="tokenExpiration();">Print token expiration</button><br><br>
     <table id="resTable"></table>
     
     <script>
@@ -35,6 +36,7 @@
           return JSON.parse(localStorage.getItem('token'))
         }
         client.requestAccessToken();
+        clearTable()
       }
 
       function revokeToken() {
@@ -43,6 +45,14 @@
         buttonSet()
       }
 
+      function tokenExpiration(){
+        let txt=tokenExpires() || "No token"
+        document.querySelector('table').innerText=txt
+      }
+
+      function tableHTML(html){
+        document.querySelector('table').innerHTML=html;
+      }
       function makeTable(x){
         let table = document.getElementById("resTable")
         table.innerText=""
@@ -67,6 +77,12 @@
         table.innerText=""
       }
 
+
+      function tokenExpires(){
+        let token = JSON.parse(localStorage.getItem('token'))
+        if (!token || !token?.expireAt) return null
+        return new Date(token.expireAt)
+      }
 
       function hasToken(){
         let token = JSON.parse(localStorage.getItem('token'))
@@ -93,17 +109,30 @@
         }
         console.log(base_url)
         console.log(options)
-        let x = await (await fetch(base_url,options)).json()
-        x.columns=["Id","Token"]
-        console.log(x)
+          let x = await (await fetch(base_url,options)).json()
+          if (x.error){
+            tableHTML(`<pre>${x.error.message}</pre>`)
+            return
+          }
+          x.columns=["Id","Token"]
+          console.log(x)
 
-        makeTable(x)
+          makeTable(x)
+
       }
 
       function buttonSet(){
-        let haveToken=hasToken()?"true":"false"
         document.querySelectorAll("button").forEach( (button) => {
-          button.disabled= button.dataset.requireToken!=haveToken
+          switch(button.dataset.requireToken){
+            case "true": 
+              button.disabled = !hasToken();
+              break;
+            case "false": 
+              button.disabled = hasToken();
+              break;
+            default:
+              button.disabled = false;
+          }
         } )
       }
       buttonSet()
