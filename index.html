@@ -22,9 +22,7 @@
           scope: 'https://www.googleapis.com/auth/bigquery',
           callback: (tokenResponse) => {
             tokenResponse.expireAt = Date.now() + (tokenResponse.expires_in - 120)*1000
-            console.log(tokenResponse)
             localStorage.setItem('token',JSON.stringify(tokenResponse))
-            console.log("... TOKEN IN LS ...")
             buttonSet()
           },
         });
@@ -107,15 +105,12 @@
             'Authorization': `Bearer ${token.access_token}`
           }
         }
-        console.log(base_url)
-        console.log(options)
           let x = await (await fetch(base_url,options)).json()
           if (x.error){
             tableHTML(`<pre>${x.error.message}</pre>`)
             return
           }
           x.columns=["Id","Token"]
-          console.log(x)
 
           makeTable(x)
 
