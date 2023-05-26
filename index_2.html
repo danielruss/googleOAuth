@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="https://accounts.google.com/gsi/client" onload="initClient()" async defer></script>
+  </head>
+  <body>
+    <h1>Google Identity Services Authorization Token model</h1>
+    <button data-require-token="false" onclick="getToken();">Get access token</button><br><br>
+    <button data-require-token="true" onclick="loadData();">Load Data from Big Query</button><br><br>
+    <button data-require-token="true" onclick="revokeToken();">Revoke token</button><br><br>
+    <button data-require-token="always" onclick="tokenExpiration();">Print token expiration</button><br><br>
+    <table id="resTable"></table>
+    
+    <script>
+      // https://developers.google.com/identity/oauth2/web/guides/migration-to-gis?authuser=1#gis-only
+      var client;
+
+      function initClient() {
+
+        client = google.accounts.oauth2.initTokenClient({
+          client_id: '470984582294-ciqa45m21eqsli2v0m8kqdsobl2690jg.apps.googleusercontent.com',
+          scope: 'https://www.googleapis.com/auth/bigquery',
+          callback: (tokenResponse) => {
+            tokenResponse.expireAt = Date.now() + (tokenResponse.expires_in - 120)*1000
+            localStorage.setItem('token',JSON.stringify(tokenResponse))
+            buttonSet()
+          },
+        });
+
+      }
+
+      function getToken() {
+        if (hasToken()) {
+          return JSON.parse(localStorage.getItem('token'))
+        }
+        client.requestAccessToken();
+        clearTable()
+      }
+
+      function revokeToken() {
+        google.accounts.oauth2.revoke(localStorage.getItem("token").access_token, () => {console.log('access token revoked')});
+        delete localStorage.token
+        buttonSet()
+      }
+
+      function tokenExpiration(){
+        let txt=tokenExpires() || "No token"
+        document.querySelector('table').innerText=txt
+      }
+
+      function tableHTML(html){
+        document.querySelector('table').innerHTML=html;
+      }
+      function makeTable(x){
+        let table = document.getElementById("resTable")
+        table.innerText=""
+        let headElement = table.createTHead()
+        let rowElement = headElement.insertRow()
+        x.columns.forEach(col =>{
+          let cell=rowElement.insertCell()
+          cell.outerHTML = `<th>${col}</th>`
+        })
+
+        let bodyElement = table.createTBody()
+        x.rows.forEach(row => {
+          rowElement = bodyElement.insertRow()
+          row.f.forEach(value =>{
+            let cell=rowElement.insertCell()
+            cell.innerText = value.v
+          })
+        });
+      }
+      function clearTable(){
+        let table = document.getElementById("resTable")
+        table.innerText=""
+      }
+
+
+      function tokenExpires(){
+        let token = JSON.parse(localStorage.getItem('token'))
+        if (!token || !token?.expireAt) return null
+        return new Date(token.expireAt)
+      }
+
+      function hasToken(){
+        let token = JSON.parse(localStorage.getItem('token'))
+        return(token && (token.expireAt > Date.now()) )
+      }
+
+      async function loadData(){
+        clearTable()
+        if (!hasToken()) {
+          getToken()
+          return
+        }
+        token = getToken()
+
+
+        let project="nih-nci-dceg-druss";
+        let dataset="DansDataset"
+        let table="FakeData"
+        let base_url=`https://bigquery.googleapis.com/bigquery/v2/projects/${project}/datasets/${dataset}/tables/${table}/data`
+        let options = {
+          headers: {
+            'Authorization': `Bearer ${token.access_token}`
+          }
+        }
+          let x = await (await fetch(base_url,options)).json()
+          if (x.error){
+            tableHTML(`<pre>${x.error.message}</pre>`)
+            return
+          }
+          x.columns=["Id","Token"]
+
+          makeTable(x)
+
+      }
+
+      function buttonSet(){
+        document.querySelectorAll("button").forEach( (button) => {
+          switch(button.dataset.requireToken){
+            case "true": 
+              button.disabled = !hasToken();
+              break;
+            case "false": 
+              button.disabled = hasToken();
+              break;
+            default:
+              button.disabled = false;
+          }
+        } )
+      }
+      buttonSet()
+    </script>
+
+  </body>
+</html>

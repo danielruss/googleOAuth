@@ -1,137 +1,116 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <script src="https://accounts.google.com/gsi/client" onload="initClient()" async defer></script>
-  </head>
-  <body>
-    <h1>Google Identity Services Authorization Token model</h1>
-    <button data-require-token="false" onclick="getToken();">Get access token</button><br><br>
-    <button data-require-token="true" onclick="loadData();">Load Data from Big Query</button><br><br>
-    <button data-require-token="true" onclick="revokeToken();">Revoke token</button><br><br>
-    <button data-require-token="always" onclick="tokenExpiration();">Print token expiration</button><br><br>
-    <table id="resTable"></table>
-    
-    <script>
-      // https://developers.google.com/identity/oauth2/web/guides/migration-to-gis?authuser=1#gis-only
-      var client;
 
-      function initClient() {
+<head>
+  <script src="https://accounts.google.com/gsi/client" onload="initClient()" async defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"
+    integrity="sha512-+BMamP0e7wn39JGL8nKAZ3yAQT2dL5oaXWr4ZYlTGkKOaoXM/Yj7c4oy50Ngz5yoUutAG17flueD4F6QpTlPng=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
 
-        client = google.accounts.oauth2.initTokenClient({
-          client_id: '470984582294-ciqa45m21eqsli2v0m8kqdsobl2690jg.apps.googleusercontent.com',
-          scope: 'https://www.googleapis.com/auth/bigquery',
-          callback: (tokenResponse) => {
-            tokenResponse.expireAt = Date.now() + (tokenResponse.expires_in - 120)*1000
-            localStorage.setItem('token',JSON.stringify(tokenResponse))
-            buttonSet()
-          },
-        });
+<body>
+  <h1>Google Identity Services Authorization Token model</h1>
+  <script type="module">
+    import emb from "./embedding.js"
+    window.emb = emb
+    emb.tokenBar()
+  </script>
 
+  <textarea rows="10"></textarea>
+
+  <button data-require-token="true" onclick="embed();">embed text</button><br><br>
+  <table id="resTable"></table>
+
+  <script>
+    // https://developers.google.com/identity/oauth2/web/guides/migration-to-gis?authuser=1#gis-only
+    var client;
+
+    function initClient() {
+
+      client = google.accounts.oauth2.initTokenClient({
+        client_id: '470984582294-ciqa45m21eqsli2v0m8kqdsobl2690jg.apps.googleusercontent.com',
+        scope: 'https://www.googleapis.com/auth/cloud-platform',
+        callback: (tokenResponse) => {
+          tokenResponse.expireAt = Date.now() + (tokenResponse.expires_in - 120) * 1000
+          localStorage.setItem('token', JSON.stringify(tokenResponse))
+          emb.buttonSet()
+        },
+      });
+
+    }
+
+    async function embed() {
+      if (!emb.hasToken()) {
+        emb.getToken()
+        return
       }
+      token = emb.getToken()
+      let text = document.querySelector("textarea").value
+      if (text.length < 1) return
 
-      function getToken() {
-        if (hasToken()) {
-          return JSON.parse(localStorage.getItem('token'))
+      let instances = text.split("\n").map(x => ({ content: x }))
+
+      let unique_text = []
+      let embed_index = {}
+
+      // I hate for loops, but forEach does not await...
+      // https://stackoverflow.com/a/37576787/
+      for ([index, instance] of instances.entries()) {
+        if (instance.content.trim().length==0) continue
+        console.log(instance.content)
+        let cache = await localforage.getItem(instance.content)
+        if (cache) {
+          instance.status = "cached"
+          instance.embeddings = cache;
+          unique_text.push(instance.content)
+          continue
         }
-        client.requestAccessToken();
-        clearTable()
-      }
-
-      function revokeToken() {
-        google.accounts.oauth2.revoke(localStorage.getItem("token").access_token, () => {console.log('access token revoked')});
-        delete localStorage.token
-        buttonSet()
-      }
-
-      function tokenExpiration(){
-        let txt=tokenExpires() || "No token"
-        document.querySelector('table').innerText=txt
-      }
-
-      function tableHTML(html){
-        document.querySelector('table').innerHTML=html;
-      }
-      function makeTable(x){
-        let table = document.getElementById("resTable")
-        table.innerText=""
-        let headElement = table.createTHead()
-        let rowElement = headElement.insertRow()
-        x.columns.forEach(col =>{
-          let cell=rowElement.insertCell()
-          cell.outerHTML = `<th>${col}</th>`
-        })
-
-        let bodyElement = table.createTBody()
-        x.rows.forEach(row => {
-          rowElement = bodyElement.insertRow()
-          row.f.forEach(value =>{
-            let cell=rowElement.insertCell()
-            cell.innerText = value.v
-          })
-        });
-      }
-      function clearTable(){
-        let table = document.getElementById("resTable")
-        table.innerText=""
-      }
-
-
-      function tokenExpires(){
-        let token = JSON.parse(localStorage.getItem('token'))
-        if (!token || !token?.expireAt) return null
-        return new Date(token.expireAt)
-      }
-
-      function hasToken(){
-        let token = JSON.parse(localStorage.getItem('token'))
-        return(token && (token.expireAt > Date.now()) )
-      }
-
-      async function loadData(){
-        clearTable()
-        if (!hasToken()) {
-          getToken()
-          return
+        embed_index[instance.content] = embed_index[instance.content] ?? []
+        embed_index[instance.content].push(index)
+        if (!unique_text.includes(instance.content)) {
+          instance.status = "embed"
+          unique_text.push(instance.content)
+          continue
         }
-        token = getToken()
+        instance.status = "duplicate"
+      }
 
+      window.instances = instances;
+      embed_instances = instances.filter((instance) => instance.status == "embed")
+      window.embed_instances = embed_instances
 
-        let project="nih-nci-dceg-druss";
-        let dataset="DansDataset"
-        let table="FakeData"
-        let base_url=`https://bigquery.googleapis.com/bigquery/v2/projects/${project}/datasets/${dataset}/tables/${table}/data`
+      if (embed_instances.length > 0) {
+        let project = "nih-nci-dceg-druss";
+        let base_url = `https://us-central1-aiplatform.googleapis.com/v1/projects/${project}/locations/us-central1/publishers/google/models/textembedding-gecko:predict`
         let options = {
           headers: {
             'Authorization': `Bearer ${token.access_token}`
-          }
+          },
+          method: "POST",
+          body: JSON.stringify({
+            "instances": embed_instances
+          })
         }
-          let x = await (await fetch(base_url,options)).json()
-          if (x.error){
-            tableHTML(`<pre>${x.error.message}</pre>`)
-            return
-          }
-          x.columns=["Id","Token"]
+        let results = await (await fetch(base_url, options)).json()
+        if (results.error) {
+          console.error(`${results.error.message}`)
+          return
+        }
+        window.results = results
+        results.predictions.forEach((embedding,index) => {
+          // we only embed the embed_instance
+          let text_embedded = embed_instances[index].content
+          localforage.setItem(text_embedded, embedding.embeddings)
 
-          makeTable(x)
-
+          // get the original indices for this text
+          embed_index[text_embedded]?.forEach(indx => instances[indx].embeddings=embedding.embeddings)
+        });
       }
 
-      function buttonSet(){
-        document.querySelectorAll("button").forEach( (button) => {
-          switch(button.dataset.requireToken){
-            case "true": 
-              button.disabled = !hasToken();
-              break;
-            case "false": 
-              button.disabled = hasToken();
-              break;
-            default:
-              button.disabled = false;
-          }
-        } )
-      }
-      buttonSet()
-    </script>
+      return instances
+    }
+  </script>
 
-  </body>
+</body>
+
 </html>
