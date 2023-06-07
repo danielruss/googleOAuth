@@ -12,7 +12,7 @@ function tokenBar() {
 }
 
 function buttonSet() {
-    document.querySelectorAll("button").forEach((button, indx) => {
+    document.querySelectorAll(".token_bar button").forEach((button, indx) => {
         switch (indx) {
             case 0:
                 button.addEventListener("click", getToken)

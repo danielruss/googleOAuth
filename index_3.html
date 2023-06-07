@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"
+    integrity="sha512-+BMamP0e7wn39JGL8nKAZ3yAQT2dL5oaXWr4ZYlTGkKOaoXM/Yj7c4oy50Ngz5yoUutAG17flueD4F6QpTlPng=="
+    crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <style>
+    .irow {
+      display: flex;
+    }
+    .irow textarea,
+    .irow div {
+      border: thin black solid;
+      height: 200px;
+      width: 200px;
+      margin: 0 5px 5px 5px;
+      padding: 5px;
+    }
+
+    .hide {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Promises... Promises</h1>
+
+
+
+  <script type="module">
+    // test 1: get all keys...
+    let t0 = performance.now()
+    let keys = await localforage.keys()
+    let t1 = performance.now()
+    console.log(`time to get all keys: ${t1-t0} ms`)
+
+    // test 2: iterate with values...
+    // save the 14 seconds to run this test...
+/*
+    t0 = performance.now()
+    keys = []
+    let values = []
+    await localforage.iterate( (value,key,iter) => {
+      // iter is 1 based not 0 based...
+      keys.push(key)
+      values.push(value)
+    } )
+    t1 = performance.now()
+    console.log(`# keys: ${keys.length}, # values: ${values.length}`)
+    console.log(keys.slice(0,3))
+    console.log(values.slice(0,3))
+    console.log(`time to iterate: ${t1-t0} ms`)
+*/
+
+  let n=10000;
+  t0 = performance.now()
+  let rnd = Array(n).fill().map(()=>Math.floor(Math.random() * keys.length));
+  t1 = performance.now()
+  console.log(`time to get ${n} Random ints: ${t1-t0} ms`)
+
+/**
+  // next test.  Using a for await loop...
+  // MUCH SLOWER...
+  let res_3 = []
+  t0 = performance.now()
+  for await (let i of rnd){
+    await localforage.getItem(keys[i]).then(k=>res_3.push(k))
+  }
+  t1 = performance.now()
+  console.log(res_3.length)
+  console.log(res_3.slice(0,10))
+  console.log(res_3.slice(-10))
+  console.log(`time to get ${n} values for-await loop w/callback: ${t1-t0} ms`)
+  res_3=null
+**/
+
+
+  t0 = performance.now()
+  let res_1 = await Promise.all( rnd.map( (i) =>{
+   return  localforage.getItem(keys[i])
+  }))
+  t1 = performance.now()
+  console.log(res_1.length)
+  console.log(res_1.slice(0,10))
+  console.log(res_1.slice(-10))
+  console.log(`time to get ${n} values Promise.all: ${t1-t0} ms`)
+  res_1=null
+
+  t0 = performance.now()
+  let res_2 = await Promise.allSettled( rnd.map( (i) =>{
+   return  localforage.getItem(keys[i])
+  }))
+  t1 = performance.now()
+  console.log(res_2.length)
+  console.log(res_2.slice(0,10))
+  console.log(res_2.slice(-10))
+  console.log(`time to get ${n} values Promise.allSettled: ${t1-t0} ms`)
+  res_2=null
+
+  t0 = performance.now()
+  res_1 = await Promise.all( rnd.map( (i) =>{
+   return  localforage.getItem(keys[i])
+  }))
+  t1 = performance.now()
+  console.log(res_1.length)
+  console.log(res_1.slice(0,10))
+  console.log(res_1.slice(-10))
+  console.log(`time to get ${n} values Promise.all: ${t1-t0} ms`)
+  res_1=null
+
+  t0 = performance.now()
+  res_2 = await Promise.allSettled( rnd.map( (i) => localforage.getItem(keys[i]) ))
+  t1 = performance.now()
+  console.log(res_2.length)
+  console.log(res_2.slice(0,10))
+  console.log(res_2.slice(-10))
+  console.log(`time to get ${n} values Promise.allSettled: ${t1-t0} ms`)
+  res_2=null
+
+  t0 = performance.now()
+  res_1 = await Promise.all( rnd.map( (i) =>{
+   return  localforage.getItem(keys[i])
+  }))
+  t1 = performance.now()
+  console.log(res_1.length)
+  console.log(res_1.slice(0,10))
+  console.log(res_1.slice(-10))
+  console.log(`time to get ${n} values Promise.all: ${t1-t0} ms`)
+  res_1=null
+
+  t0 = performance.now()
+  res_2 = await Promise.allSettled( rnd.map( (i) => localforage.getItem(keys[i]) ))
+  t1 = performance.now()
+  console.log(res_2.length)
+  console.log(res_2.slice(0,10))
+  console.log(res_2.slice(-10))
+  console.log(`time to get ${n} values Promise.allSettled: ${t1-t0} ms`)
+  res_2=null
+  </script>
+
+</body>
+
+</html>

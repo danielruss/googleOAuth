@@ -6,6 +6,23 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"
     integrity="sha512-+BMamP0e7wn39JGL8nKAZ3yAQT2dL5oaXWr4ZYlTGkKOaoXM/Yj7c4oy50Ngz5yoUutAG17flueD4F6QpTlPng=="
     crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <style>
+    .irow {
+      display: flex;
+    }
+    .irow textarea,
+    .irow div {
+      border: thin black solid;
+      height: 200px;
+      width: 200px;
+      margin: 0 5px 5px 5px;
+      padding: 5px;
+    }
+
+    .hide {
+      display: none;
+    }
+  </style>
 </head>
 
 <body>
@@ -16,14 +33,43 @@
     emb.tokenBar()
   </script>
 
-  <textarea rows="10"></textarea>
 
-  <button data-require-token="true" onclick="embed();">embed text</button><br><br>
+  <div class="irow">
+    <textarea></textarea>
+    <div id="embedFile">drop file to embed here</div>
+  </div>
+  <button data-require-token="true" onclick="embed_textbox();">embed text</button>
+
+  <label id="pbLabel" for="progress-bar"></label>
+  <progress id="progress-bar" class="hide"></progress><br>
+
+  <button id="download" class="hide" onclick="download_table()">download embeddings</button>
   <table id="resTable"></table>
 
   <script>
     // https://developers.google.com/identity/oauth2/web/guides/migration-to-gis?authuser=1#gis-only
     var client;
+
+    let dropBox = document.getElementById("embedFile")
+    dropBox.addEventListener("dragover",(event)=>event.preventDefault());
+    dropBox.addEventListener("drop",async (event)=>{
+      event.preventDefault()
+
+      if (event.dataTransfer?.files){
+        
+        let fileList = event.dataTransfer.files
+        //console.log(fileList)
+        //let pickerOpts = {
+        //  suggestedName:"embeddings.json"
+        //}
+        //let fileHandle =  await window.showSaveFilePicker(pickerOpts)
+        //console.log(event.dataTransfer.files)
+        //embed_files(event.dataTransfer.files,fileHandle)
+        await localforage.removeItem("_currentInstances_")
+        embed_files(fileList)
+      }
+    });
+
 
     function initClient() {
 
@@ -39,16 +85,63 @@
 
     }
 
-    async function embed() {
+    async function embed_files(files,fileHandle){
+
+      document.getElementById("download").classList.add("hide") 
+      // once again.. forEach is not async...
+      let res=[]
+      for (file of files){
+        console.log("processing ",file.name)
+        let instances = (await file.text()).split("\n").map(txt=>({ content: txt}))
+        res.push(instances)
+
+        document.getElementById("pbLabel").innerText=`embedding ${file.name}`
+        let pb = document.querySelector("progress")
+        pb.max = instances.length;
+        pb.value = 0;
+        pb.classList.remove("hide")
+        
+        // there appears to be a 5 string max for embedding ...
+        for (let indx=0; indx<instances.length; indx+=5){
+         let tmp=instances.slice(indx,indx+5)
+         await embed(tmp)
+         //res.push(await embed(tmp))
+         pb.value+=tmp.length;
+        }
+        pb.classList.add("hide")
+        document.getElementById("pbLabel").innerText=""
+      }
+      
+      res=res.flat()
+      await localforage.setItem("_currentInstances_",res)
+      //console.log(res)
+      makeTable(res)
+    }
+
+    async function embed_textbox(){
+      document.getElementById("download").classList.add("hide") 
+      localforage.removeItem("_currentInstances_")
+      if (!emb.hasToken()) {
+        emb.getToken()
+        return
+      }
+      let text = document.querySelector("textarea").value
+      if (text.length < 1) return
+
+      let instances = text.split("\n").map(x => ({ content: x }))
+      await embed(instances)
+      await localforage.setItem("_currentInstances_",instances)
+      makeTable(instances)
+    }
+
+    async function embed(instances) {
+
       if (!emb.hasToken()) {
         emb.getToken()
         return
       }
       token = emb.getToken()
-      let text = document.querySelector("textarea").value
-      if (text.length < 1) return
 
-      let instances = text.split("\n").map(x => ({ content: x }))
 
       let unique_text = []
       let embed_index = {}
@@ -57,12 +150,12 @@
       // https://stackoverflow.com/a/37576787/
       for ([index, instance] of instances.entries()) {
         if (instance.content.trim().length==0) continue
-        console.log(instance.content)
         let cache = await localforage.getItem(instance.content)
         if (cache) {
           instance.status = "cached"
           instance.embeddings = cache;
           unique_text.push(instance.content)
+
           continue
         }
         embed_index[instance.content] = embed_index[instance.content] ?? []
@@ -75,9 +168,9 @@
         instance.status = "duplicate"
       }
 
-      window.instances = instances;
+      //window.instances = instances;
       embed_instances = instances.filter((instance) => instance.status == "embed")
-      window.embed_instances = embed_instances
+      //window.embed_instances = embed_instances
 
       if (embed_instances.length > 0) {
         let project = "nih-nci-dceg-druss";
@@ -97,17 +190,112 @@
           return
         }
         window.results = results
-        results.predictions.forEach((embedding,index) => {
+        for (let [index, embeddings] of results.predictions.entries()) {
           // we only embed the embed_instance
           let text_embedded = embed_instances[index].content
           localforage.setItem(text_embedded, embedding.embeddings)
-
-          // get the original indices for this text
-          embed_index[text_embedded]?.forEach(indx => instances[indx].embeddings=embedding.embeddings)
-        });
+        };
       }
 
       return instances
+    }
+
+    HTMLTableRowElement.prototype.addHead=function(txt){
+      let th = document.createElement("th")
+      th.innerText=txt
+      this.insertAdjacentElement("beforeend",th)
+      return th
+    }
+    HTMLTableRowElement.prototype.addCell=function(txt){
+      let td = document.createElement("td")
+      td.innerText=txt
+      this.insertAdjacentElement("beforeend",td)
+      return td
+    }
+
+    async function makeTable(instances){     
+      document.getElementById("download").classList.add("hide") 
+      let table = document.getElementById("resTable")
+      table.innerText=""
+
+      document.getElementById("pbLabel").innerText=`build Table`
+      let pb = document.querySelector("progress")
+      pb.classList.remove("hide")
+      pb.max = instances.length;
+      pb.value = 0;
+      
+      // get the instance from LF
+      for await (let instance of instances.slice(0,30)){
+        instance.embeddings = await localforage.getItem(instance.content)
+        pb.value++
+      }
+
+      // make the header
+      let theader=table.createTHead()
+      let row = theader.insertRow()
+      row.addHead("Status")
+      row.addHead("Text")
+      row.addHead("Embedding")
+
+      // make body
+      let tbody=table.createTBody()
+      instances.slice(0,30).forEach(instance => {
+        row=tbody.insertRow()
+        row.addCell(instance?.status ?? "")
+        row.addCell(instance?.content ?? "")
+        row.addCell(instance?.embeddings?.values ?? "")
+      })
+      document.getElementById("download").classList.remove("hide")
+    }
+
+    async function download_table(){
+
+      
+      let pickerOpts = {
+        suggestedName:"embeddings.json"
+      }
+      fileHandle = await window.showSaveFilePicker(pickerOpts);
+      
+      let instances = await localforage.getItem("_currentInstances_")
+      console.log(instances)
+      
+      document.getElementById("pbLabel").innerText=`write ${fileHandle.name}`
+      let pb = document.querySelector("progress")
+      pb.max = instances.length;
+      pb.value = 0;
+    
+      let writable = await fileHandle.createWritable();
+      await writable.write("[")
+      while(instances.length>0){
+        instance = instances.shift()
+        instance.embeddings = await localforage.getItem(instance.content) 
+        let x=(instances.length>0?',':']')
+        await writable.write(JSON.stringify(instance,null,4)+x)
+        pb.value++;
+      }
+      writable.close()
+
+      pb.classList.add("hide")
+      document.getElementById("pbLabel").innerText=""
+    }
+    async function download_table_og(instances){
+      if (!instances){
+        instances = await localforage.getItem("_currentInstances_")
+      }
+      let out="[";
+      while(instances.length>1){
+        out+=JSON.stringify(instances.shift(),null,4)+",";
+      }
+      out+=JSON.stringify(instances.shift(),null,4)+"]";
+
+      let link=document.createElement("a")
+      link.href=URL.createObjectURL(new Blob([out]),{
+        type: "application/json"
+      });
+      link.setAttribute("download","embeddings.json")
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link)
     }
   </script>
 
