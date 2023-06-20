@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script src="https://accounts.google.com/gsi/client" onload="initClient()" async defer></script>
+    <script src="./load_data.js" type="module"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"
+        integrity="sha512-+BMamP0e7wn39JGL8nKAZ3yAQT2dL5oaXWr4ZYlTGkKOaoXM/Yj7c4oy50Ngz5yoUutAG17flueD4F6QpTlPng=="
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+</head>
+
+<body>
+    <h3>Get Fake Data from Big Query </h3>
+    <table id="bq-data-table"></table>
+    <script>
+        let client={}
+        function initClient() {
+            client = google.accounts.oauth2.initTokenClient({
+                client_id: '470984582294-ciqa45m21eqsli2v0m8kqdsobl2690jg.apps.googleusercontent.com',
+                scope: 'https://www.googleapis.com/auth/cloud-platform',
+                callback: (tokenResponse) => {
+                    tokenResponse.expireAt = Date.now() + (tokenResponse.expires_in - 120) * 1000
+                    localStorage.setItem('token', JSON.stringify(tokenResponse))
+                    emb.buttonSet()
+                },
+            });
+        }
+    </script>
+    
+</body>
+
+</html>

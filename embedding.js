@@ -1,5 +1,10 @@
 console.log(" ... in embedding.js ")
 
+let tokenListenerList = []
+function addTokenListener(ele){
+    tokenListenerList.push(ele)
+}
+
 function tokenBar() {
     document.body.insertAdjacentHTML("afterbegin",
         `<div class="token_bar">
@@ -8,10 +13,7 @@ function tokenBar() {
        <button data-require-token="true">Revoke token</button>
        <input type="text" id="token_console" disabled style="width:100%">
     </div>`)
-    buttonSet()
-}
 
-function buttonSet() {
     document.querySelectorAll(".token_bar button").forEach((button, indx) => {
         switch (indx) {
             case 0:
@@ -23,6 +25,11 @@ function buttonSet() {
             case 2:
                 button.addEventListener("click", revokeToken)
         }
+    })
+}
+
+function buttonSet() {
+    document.querySelectorAll(".token_bar button").forEach((button) => {
         switch (button.dataset.requireToken) {
             case "true":
                 button.disabled = !hasToken();
@@ -34,6 +41,10 @@ function buttonSet() {
                 button.disabled = false;
         }
     })
+
+    let event1 = new CustomEvent("token_event",{hasToken: hasToken()})
+    console.log(" ===========> dipatching event: ",event1,tokenListenerList)
+    tokenListenerList.forEach( elem => elem?.dispatchEvent(event1) )
 }
 buttonSet()
 
@@ -50,6 +61,7 @@ function tokenExpires() {
 }
 
 
+
 function hasToken() {
     let token = JSON.parse(localStorage.getItem('token'))
     return (token && (token.expireAt > Date.now()))
@@ -59,11 +71,12 @@ function getToken() {
     if (hasToken()) {
         return JSON.parse(localStorage.getItem('token'))
     }
-    client.requestAccessToken();
+    client.requestAccessToken()
 }
 
 function revokeToken() {
-    google.accounts.oauth2.revoke(localStorage.getItem("token").access_token, () => { console.log('access token revoked') });
+    let token = JSON.parse(localStorage.getItem('token'))
+    google.accounts.oauth2.revoke(token.access_token, () => { console.log('access token revoked') });
     delete localStorage.token
     buttonSet()
 }
@@ -72,6 +85,7 @@ export default {
     tokenBar,
     buttonSet,
     hasToken,
-    getToken
+    getToken,
+    addTokenListener
 }
 
