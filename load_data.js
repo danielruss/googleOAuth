@@ -52,10 +52,13 @@ function makeTable(x) {
     add_download_button(dta)
 }
 function add_download_button(x){
-    console.log(x)
+    //remove the old dl_button (if it exists)
+    document.querySelector("#dl_button")?.remove()
+
     let table = document.getElementById("bq-data-table")
     let download_botton = document.createElement("button")
     download_botton.innerText = "download data"
+    download_botton.id="dl_button"
     download_botton.addEventListener("click", ()=>{
         let json = JSON.stringify(x)
         let blob = new Blob([ json ], {type: "octet/stream"})
